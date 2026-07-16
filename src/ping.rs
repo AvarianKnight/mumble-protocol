@@ -1,4 +1,4 @@
-//! Ping messages and codec
+//! Legacy Ping messages and codec
 //!
 //! A Mumble client can send periodic UDP [PingPacket]s to servers
 //! in order to query their current state and measure latency.
@@ -104,37 +104,14 @@ impl TryFrom<&[u8]> for PongPacket {
 
 impl From<PongPacket> for [u8; 24] {
     fn from(packet: PongPacket) -> Self {
-        let version = packet.version.to_be_bytes();
-        let id = packet.id.to_be_bytes();
-        let users = packet.users.to_be_bytes();
-        let max_users = packet.max_users.to_be_bytes();
-        let bandwidth = packet.bandwidth.to_be_bytes();
-        // Is there no nicer way to do this?
-        [
-            version[0],
-            version[1],
-            version[2],
-            version[3],
-            id[0],
-            id[1],
-            id[2],
-            id[3],
-            id[4],
-            id[5],
-            id[6],
-            id[7],
-            users[0],
-            users[1],
-            users[2],
-            users[3],
-            max_users[0],
-            max_users[1],
-            max_users[2],
-            max_users[3],
-            bandwidth[0],
-            bandwidth[1],
-            bandwidth[2],
-            bandwidth[3],
-        ]
+        let mut buf = [0u8; 24];
+
+        buf[0..4].copy_from_slice(&packet.version.to_be_bytes());
+        buf[4..12].copy_from_slice(&packet.id.to_be_bytes());
+        buf[12..16].copy_from_slice(&packet.users.to_be_bytes());
+        buf[16..20].copy_from_slice(&packet.max_users.to_be_bytes());
+        buf[20..24].copy_from_slice(&packet.bandwidth.to_be_bytes());
+
+        buf
     }
 }
