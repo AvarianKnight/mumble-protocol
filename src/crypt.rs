@@ -102,14 +102,16 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
         encrypt_nonce: [u8; BLOCK_SIZE],
         decrypt_nonce: [u8; BLOCK_SIZE],
     ) -> Self {
+        let decrypt_nonce = u128::from_le_bytes(decrypt_nonce);
+        let byte = (decrypt_nonce >> 8) as u8;
         CryptState {
             codec: VoiceCodec::new(),
 
             key,
             aes: Aes128::new(GenericArray::from_slice(&key)),
             encrypt_nonce: u128::from_le_bytes(encrypt_nonce),
-            decrypt_nonce: u128::from_le_bytes(decrypt_nonce),
-            decrypt_history: [0; 0x100],
+            decrypt_nonce,
+            decrypt_history: [byte.wrapping_sub(1); 0x100],
 
             good: 0,
             late: 0,
