@@ -39,7 +39,7 @@ pub enum VoicePacket<Dst: VoicePacketDst> {
         /// Packets may contain multiple frames, so this may increase by more than one per packet.
         seq_num: u64,
         /// The actual audio data
-        payload: VoicePacketPayload,
+        payload: OpusVoicePayload,
         /// Positional audio information.
         ///
         /// Usually `[f32; 3]` but may contain additional or different data if all clients
@@ -51,17 +51,7 @@ pub enum VoicePacket<Dst: VoicePacketDst> {
 
 /// Audio data payload of [VoicePacket]s.
 #[derive(Clone, Debug, PartialEq)]
-#[non_exhaustive]
-pub enum VoicePacketPayload {
-    /// CELT Alpha (0.7.0) encoded audio frames.
-    CeltAlpha(Vec<Bytes>),
-    /// CELT Beta (0.11.0) encoded audio frames.
-    CeltBeta(Vec<Bytes>),
-    /// Speex encoded audio frames.
-    Speex(Vec<Bytes>),
-    /// Opus encoded audio frame with end-of-transmission bit.
-    Opus(Bytes, bool),
-}
+pub struct OpusVoicePayload(Bytes, bool);
 
 /// A `Codec` implementation that parses a stream of data chunks into [VoicePacket]s.
 ///
@@ -123,7 +113,7 @@ impl VoicePacketDst for Clientbound {
     type SessionId = u32;
 
     fn read_session_id<T: Read + Sized>(buf: &mut T) -> Result<Self::SessionId, io::Error> {
-        Ok(buf.read_varint()? as u32)
+        Ok(buf.read_varint(0)? as u32)
     }
 
     fn write_session_id(buf: &mut BytesMut, session_id: Self::SessionId) {
@@ -144,43 +134,15 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> Decoder
         let kind = header >> 5;
         let target = header & 0b11111;
         let result = if kind == 1 {
-            let timestamp = buf.read_varint()?;
+            let timestamp = buf.read_varint(0)?;
             buf_mut.advance(buf_mut.len());
             VoicePacket::Ping { timestamp }
         } else {
             let session_id = DecodeDst::read_session_id(&mut buf)?;
-            let seq_num = buf.read_varint()?;
+            let seq_num = buf.read_varint(0)?;
             let payload = match kind {
-                // Mumble spec only supports OPUS now.
-                // 0 | 2 | 3 => {
-                //     let mut frames = Vec::new();
-                //     let position = buf.position();
-                //     buf_mut.advance(position as usize);
-                //     loop {
-                //         if buf_mut.is_empty() {
-                //             return Err(io::ErrorKind::UnexpectedEof.into());
-                //         }
-                //         let header = buf_mut[0];
-                //         buf_mut.advance(1);
-                //
-                //         let len = (header & !0x80) as usize;
-                //         if buf_mut.len() < len {
-                //             return Err(io::ErrorKind::UnexpectedEof.into());
-                //         }
-                //         frames.push(buf_mut.split_to(len).freeze());
-                //         if header & 0x80 != 0x80 {
-                //             break;
-                //         }
-                //     }
-                //     match kind {
-                //         0 => VoicePacketPayload::CeltAlpha(frames),
-                //         2 => VoicePacketPayload::Speex(frames),
-                //         3 => VoicePacketPayload::CeltBeta(frames),
-                //         _ => panic!(),
-                //     }
-                // }
                 4 => {
-                    let header = buf.read_varint()?;
+                    let header = buf.read_varint(0)?;
                     let position = buf.position();
                     buf_mut.advance(position as usize);
                     let termination_bit = header & 0x2000 == 0x2000;
@@ -189,7 +151,7 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> Decoder
                         return Err(io::ErrorKind::UnexpectedEof.into());
                     }
                     let frame = buf_mut.split_to(len).freeze();
-                    VoicePacketPayload::Opus(frame, termination_bit)
+                    OpusVoicePayload(frame, termination_bit)
                 }
                 _ => {
                     return Err(io::Error::new(
@@ -216,6 +178,11 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> Decoder
     }
 }
 
+const OPUS_CODEC_ID: u8 = 4;
+const HEADER_SIZE: usize = 1;
+const SESSION_ID_SIZE: usize = 10;
+const SEQUENCE_SIZE: usize = 10;
+
 impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> Encoder<VoicePacket<EncodeDst>>
     for VoiceCodec<EncodeDst, DecodeDst>
 {
@@ -240,35 +207,17 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> Encoder<VoicePacket<E
                 payload,
                 position_info,
             } => {
-                let kind = match payload {
-                    VoicePacketPayload::CeltAlpha(_) => 0,
-                    VoicePacketPayload::Speex(_) => 2,
-                    VoicePacketPayload::CeltBeta(_) => 3,
-                    VoicePacketPayload::Opus(_, _) => 4,
-                };
-                dst.reserve(1 /*header*/ + 10 /*session_id*/ + 10 /*seq_num*/);
-                dst.put_u8(kind << 5 | target & 0b11111);
+                dst.reserve(HEADER_SIZE + SESSION_ID_SIZE + SEQUENCE_SIZE);
+                dst.put_u8(OPUS_CODEC_ID << 5 | target & 0b11111);
                 EncodeDst::write_session_id(dst, session_id);
                 dst.put_varint(seq_num);
-                match payload {
-                    VoicePacketPayload::CeltAlpha(frames)
-                    | VoicePacketPayload::Speex(frames)
-                    | VoicePacketPayload::CeltBeta(frames) => {
-                        dst.reserve(frames.iter().map(|frame| 1 + frame.len()).sum());
-                        let mut iter = frames.iter().peekable();
-                        while let Some(frame) = iter.next() {
-                            let continuation = iter.peek().map(|_| 0x80).unwrap_or(0);
-                            dst.put_u8(continuation | (frame.len() as u8));
-                            dst.put(frame.as_ref());
-                        }
-                    }
-                    VoicePacketPayload::Opus(frame, termination_bit) => {
-                        dst.reserve(10 + frame.len());
-                        let term_bit = if termination_bit { 0x2000 } else { 0 };
-                        dst.put_varint(term_bit | (frame.len() as u64));
-                        dst.put(frame);
-                    }
-                };
+
+                let OpusVoicePayload(frame, termination_bit) = payload;
+
+                dst.reserve(10 + frame.len());
+                let term_bit = if termination_bit { 0x2000 } else { 0 };
+                dst.put_varint(term_bit | (frame.len() as u64));
+                dst.put(frame);
                 if let Some(bytes) = position_info {
                     dst.extend_from_slice(&bytes);
                 }

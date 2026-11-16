@@ -4,11 +4,12 @@ use byteorder::ReadBytesExt;
 use byteorder::WriteBytesExt;
 use bytes::BufMut;
 use std::io;
+use std::io::Error;
 
 /// Extension trait for reading varint values.
 pub trait ReadExt: io::Read {
     /// Reads a 64-bit varint.
-    fn read_varint(&mut self) -> io::Result<u64>;
+    fn read_varint(&mut self, recursion: u8) -> io::Result<u64>;
 }
 
 /// Extension trait for writing varint values.
@@ -24,10 +25,16 @@ pub trait BufMutExt: BufMut {
 }
 
 impl<T: io::Read> ReadExt for T {
-    fn read_varint(&mut self) -> io::Result<u64> {
+    fn read_varint(&mut self, recursion: u8) -> io::Result<u64> {
         let b0 = self.read_u8()?;
         if b0 & 0b1111_1100 == 0b1111_1000 {
-            return Ok(!self.read_varint()?);
+            if recursion > 7 {
+                return Err(Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Input was malformed by a malicious client.",
+                ));
+            }
+            return Ok(!self.read_varint(recursion + 1)?);
         }
         if b0 & 0b1111_1100 == 0b1111_1100 {
             return Ok(!u64::from(b0 & 0x03));
