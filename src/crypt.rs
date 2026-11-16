@@ -20,13 +20,14 @@ use crate::voice::VoiceCodec;
 use crate::voice::VoicePacket;
 use crate::voice::VoicePacketDst;
 
-
 /// Maximum size of an encrypted Mumble packet.
 /// Note that larger packets can be produced if there is sufficient voice data in one packet but
 /// there's no guarantee that the remote end will not just drop it.
 pub const MAX_PACKET_SIZE: usize = 1024;
+
 /// Size in bytes of the AES key used in `CryptState`.
 pub const KEY_SIZE: usize = 16;
+
 /// Size in bytes of blocks for the AES primitive.
 pub const BLOCK_SIZE: usize = std::mem::size_of::<u128>();
 
@@ -75,6 +76,8 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
     /// Creates a new CryptState with randomly generated key and initial encrypt- and decrypt-nonce.
     pub fn generate_new() -> Self {
         let mut key = [0; KEY_SIZE];
+        let mut encrypt_nonce = [0; BLOCK_SIZE];
+        let mut decrypt_nonce = [0; BLOCK_SIZE];
 
         static CRYPT_SYS_RANDOM: LazyLock<SystemRandom> = LazyLock::new(|| SystemRandom::new());
 
@@ -82,19 +85,15 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
             .fill(&mut key)
             .expect("Failed to generate random key");
 
-        CryptState {
-            codec: VoiceCodec::new(),
+        CRYPT_SYS_RANDOM
+            .fill(&mut encrypt_nonce)
+            .expect("Failed to generate random key");
 
-            key,
-            aes: Aes128::new(GenericArray::from_slice(&key)),
-            encrypt_nonce: 0,
-            decrypt_nonce: 1 << 127,
-            decrypt_history: [0; 0x100],
+        CRYPT_SYS_RANDOM
+            .fill(&mut decrypt_nonce)
+            .expect("Failed to generate random key");
 
-            good: 0,
-            late: 0,
-            lost: 0,
-        }
+        Self::new_from(key, encrypt_nonce, decrypt_nonce)
     }
 
     /// Creates a new CryptState from previously generated key, encrypt- and decrypt-nonce.
