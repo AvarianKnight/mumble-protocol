@@ -236,7 +236,7 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
 
     /// Encrypt the provided buffer using AES-OCB, returning the tag.
     fn ocb_encrypt(&self, mut buf: &mut [u8]) -> u128 {
-        let mut offset = self.aes_encrypt(self.encrypt_nonce.to_be());
+        let mut offset = self.aes_encrypt(self.encrypt_nonce.swap_bytes());
         let mut checksum = 0u128;
 
         while buf.len() > BLOCK_SIZE {
@@ -272,7 +272,7 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
     /// Decrypt the provided buffer using AES-OCB, returning the tag.
     /// **Make sure to verify that the tag matches!**
     fn ocb_decrypt(&self, mut buf: &mut [u8]) -> u128 {
-        let mut offset = self.aes_encrypt(self.decrypt_nonce.to_be());
+        let mut offset = self.aes_encrypt(self.decrypt_nonce.swap_bytes());
         let mut checksum = 0u128;
 
         while buf.len() > BLOCK_SIZE {
