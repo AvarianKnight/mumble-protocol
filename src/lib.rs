@@ -5,6 +5,7 @@
 #![deny(missing_docs)]
 #![warn(clippy::all)]
 
+pub mod constants;
 pub mod control;
 pub mod crypt;
 pub mod ping;

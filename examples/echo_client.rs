@@ -10,8 +10,8 @@ use mumble_protocol::control::msgs;
 use mumble_protocol::control::ClientControlCodec;
 use mumble_protocol::control::ControlPacket;
 use mumble_protocol::crypt::ClientCryptState;
+use mumble_protocol::voice::OpusVoicePayload;
 use mumble_protocol::voice::VoicePacket;
-use mumble_protocol::voice::VoicePacketPayload;
 use std::convert::Into;
 use std::convert::TryInto;
 use std::net::Ipv6Addr;
@@ -72,25 +72,25 @@ async fn connect(
             ControlPacket::TextMessage(mut msg) => {
                 println!(
                     "Got message from user with session ID {}: {}",
-                    msg.get_actor(),
-                    msg.get_message()
+                    msg.actor(),
+                    msg.message()
                 );
                 // Send reply back to server
                 let mut response = msgs::TextMessage::new();
-                response.mut_session().push(msg.get_actor());
+                response.mut_session().push(msg.actor());
                 response.set_message(msg.take_message());
                 sink.send(response.into()).await.unwrap();
             }
             ControlPacket::CryptSetup(msg) => {
                 // Wait until we're fully connected before initiating UDP voice
                 crypt_state = Some(ClientCryptState::new_from(
-                    msg.get_key()
+                    msg.key()
                         .try_into()
                         .expect("Server sent private key with incorrect size"),
-                    msg.get_client_nonce()
+                    msg.client_nonce()
                         .try_into()
                         .expect("Server sent client_nonce with incorrect size"),
-                    msg.get_server_nonce()
+                    msg.server_nonce()
                         .try_into()
                         .expect("Server sent server_nonce with incorrect size"),
                 ));
@@ -139,7 +139,7 @@ async fn handle_udp(server_addr: SocketAddr, crypt_state: oneshot::Receiver<Clie
             target: 0,
             session_id: (),
             seq_num: 0,
-            payload: VoicePacketPayload::Opus(Bytes::from([0u8; 128].as_ref()), true),
+            payload: OpusVoicePayload(Bytes::from([0u8; 128].as_ref()), true),
             position_info: None,
         },
         server_addr,

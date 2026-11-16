@@ -14,22 +14,13 @@ use aes::Aes128;
 
 use ring::rand::{SecureRandom, SystemRandom};
 
+use crate::constants::BLOCK_SIZE;
+use crate::constants::KEY_SIZE;
 use crate::voice::Clientbound;
 use crate::voice::Serverbound;
 use crate::voice::VoiceCodec;
 use crate::voice::VoicePacket;
 use crate::voice::VoicePacketDst;
-
-/// Maximum size of an encrypted Mumble packet.
-/// Note that larger packets can be produced if there is sufficient voice data in one packet but
-/// there's no guarantee that the remote end will not just drop it.
-pub const MAX_PACKET_SIZE: usize = 1024;
-
-/// Size in bytes of the AES key used in `CryptState`.
-pub const KEY_SIZE: usize = 16;
-
-/// Size in bytes of blocks for the AES primitive.
-pub const BLOCK_SIZE: usize = std::mem::size_of::<u128>();
 
 /// Implements OCB2-AES128 for encryption and authentication of the voice packets
 /// when transmitted over UDP.
@@ -372,7 +363,7 @@ mod test {
     use bytes::BufMut;
 
     use super::*;
-    use crate::voice::VoicePacketPayload;
+    use crate::voice::OpusVoicePayload;
 
     fn u128hex(src: &str) -> u128 {
         u128::from_str_radix(src, 16).unwrap()
@@ -488,7 +479,7 @@ mod test {
             target: 13,
             session_id: 42,
             seq_num: 123_567,
-            payload: VoicePacketPayload::Opus(BytesMut::from("test").freeze(), true),
+            payload: OpusVoicePayload(BytesMut::from("test").freeze(), true),
             position_info: None,
         };
 

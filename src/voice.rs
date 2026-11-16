@@ -51,7 +51,7 @@ pub enum VoicePacket<Dst: VoicePacketDst> {
 
 /// Audio data payload of [VoicePacket]s.
 #[derive(Clone, Debug, PartialEq)]
-pub struct OpusVoicePayload(Bytes, bool);
+pub struct OpusVoicePayload(pub Bytes, pub bool);
 
 /// A `Codec` implementation that parses a stream of data chunks into [VoicePacket]s.
 ///
