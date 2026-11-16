@@ -206,6 +206,7 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
                 late = true;
                 lost = -1;
             } else {
+                self.decrypt_nonce = saved_nonce;
                 return Err(DecryptError::Late); // late by more than 30 packets
             }
         }
