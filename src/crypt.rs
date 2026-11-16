@@ -221,12 +221,12 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> CryptState<EncodeDst,
 
         self.decrypt_history[nonce_0 as usize] = (self.decrypt_nonce >> 8) as u8;
 
-        self.good += 1;
+        self.good = self.good.wrapping_add(1);
         if late {
-            self.late += 1;
+            self.late = self.late.wrapping_add(1);
             self.decrypt_nonce = saved_nonce;
         }
-        self.lost = (self.lost as i32 + lost as i32) as u32;
+        self.lost = self.lost.saturating_add_signed(lost);
 
         Ok(self
             .codec
