@@ -332,7 +332,11 @@ impl<EncodeDst: VoicePacketDst, DecodeDst: VoicePacketDst> Decoder
         if buf_mut.is_empty() {
             return Ok(None);
         }
-        self.decrypt(buf_mut)
+        let packet = self.decrypt(buf_mut);
+
+        buf_mut.clear();
+
+        packet
             .unwrap_or_else(|_| {
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
